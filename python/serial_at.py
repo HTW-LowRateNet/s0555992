@@ -11,15 +11,34 @@ def read_input():
         if read != "":
             print(">> " + read[:-1]) # Remove last linebreak
 
+def send_command(command):
+    print(command)
+    sio.write(command + '\r\n')
+    sio.flush()
+    resp = sio.readline()
+    while resp != "":
+       print('>> ' + resp[:-1])
+       resp = sio.readline()
+
 ser = serial.Serial(
     port='/dev/ttyUSB0',
     baudrate=115200,
-    timeout=0.1
+    timeout=0.3
 )
 sio = io.TextIOWrapper(io.BufferedRWPair(ser, ser))
 
 if(not ser.isOpen()):
     ser.open()
+
+commands = [
+	'AT+RST',
+	'AT+CFG=433000000,20,6,10,1,1,0,0,0,0,3000,8,4',
+	'AT+ADDR=2121',
+	'AT+SAVE'
+]
+
+for cmd in commands:
+	send_command(cmd)
 
 start_new_thread(read_input, ())
 
