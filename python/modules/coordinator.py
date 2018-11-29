@@ -13,9 +13,13 @@ class Coordinator(Node):
         self.keepAlive.start()
 
     def stopKeepAlive(self):
-        print("stopping keepalive")
+        print("stopping Coordinator keepalive")
         self.keepAlive.stop()
 
+    def onMessage(self, sender, message):
+        print("Coordinator handling message") 
+        # TODO CHECK WHETHER COORDINATOR WAS REQUESTED
+        super(Coordinator, self).onMessage(sender, message)
 
 class CoordAlivThread (Thread):
     def __init__(self, coordinator):

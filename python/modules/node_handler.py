@@ -30,7 +30,6 @@ class NodeHandler:
         self.node = Node(address)
 
     def onSerialInput(self, text):
-        print('<< ' + text)
         parts = text.split(',')
         if len(parts) < 3:
             return

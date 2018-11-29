@@ -28,15 +28,17 @@ def read(callback):
     readLock.acquire()
     resp = sio.readline()
     while resp != "":
-       callback(resp[:-1]) # Remove last linebreak
-       resp = sio.readline()
+        text = resp[:-1] # Remove last linebreak
+        toSysout(text)
+        callback(text)
+        resp = sio.readline()
     readLock.release()
 
 def toSysout(message):
-    print("[!] " + message)
+    print("\t< serial '{}'".format(message))
 
 def write_cb(message ,callback):
-    print("[Writing serial '{}']".format(message))
+    print("\t> serial '{}'".format(message))
     sio.write(message + DELIMITER)
     sio.flush()
     read(callback)
