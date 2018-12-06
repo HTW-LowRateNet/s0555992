@@ -25,19 +25,21 @@ def initIOWrapper(serialPort):
     print("initialized IOWrapper for Serial port " + serialPort)
 
 def read(callback):
+    '''
+    reads input from serial and passes content to callback method
+    '''
     readLock.acquire()
     resp = sio.readline()
-    while resp != "":
-        text = resp[:-1] # Remove last linebreak
-        toSysout(text)
-        callback(text)
-        resp = sio.readline()
     readLock.release()
+    if resp != "":
+        text = resp[:-1] # Remove last linebreak
+        callback(text)
+        read(callback)
 
 def toSysout(message):
     print("\t< serial '{}'".format(message))
 
-def write_cb(message ,callback):
+def write_cb(message, callback):
     print("\t> serial '{}'".format(message))
     sio.write(message + DELIMITER)
     sio.flush()
