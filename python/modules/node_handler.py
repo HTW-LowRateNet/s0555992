@@ -85,8 +85,6 @@ class NodeHandler:
                 
         if self.isCoordinator():
             self.node.stopKeepAlive()
-        else:
-            self.coordTimeout.stop()
 
     def _resetCoordinator(self):
         '''
@@ -95,7 +93,6 @@ class NodeHandler:
         self.coordLock.acquire()
         self.hasCoordinator = False
         self.coordLock.release()
-        self.coordTimeout.stop()
         self._discoverCoordinator()
 
 
@@ -110,8 +107,7 @@ class NodeHandler:
             self.coordLock.acquire()
             self.hasCoordinator = True
             self.coordLock.release()
-            self.coordTimeout = CoordinatorTimeoutThread(self)
-            self.coordTimeout.start()
+            threading.Thread(target=self._coordinatorTimeout).start()
 
     def _discoverCoordinator(self):
         '''
@@ -141,27 +137,19 @@ class NodeHandler:
         '''
         self.node = Coordinator()
         self.hasCoordinator = True
-        self.coordTimeout.stop()
 
+    def _coordinatorTimeout(self):
+        '''
+        Method for timeout check of coordinator's heartbeat
 
-class CoordinatorTimeoutThread (threading.Thread):
-    '''
-    thread for monitoring time between coordinator's alive messages
-    '''
-    def __init__(self, handler):
-        threading.Thread.__init__(self)
-        self._is_running = True
-        self.handler = handler
-    def run(self):
-        while self._is_running:
-            hasCoord = self.handler.hasCoordinator
-            delta = time.time() - self.handler.lastCoordinatorAlive + 1 # compensation for timeouts
-            if(hasCoord and delta >= TIMEOUT_FOR_COORDINATOR_ALIVE):
+        supposed to run in thread
+        '''
+        while self.hasCoordinator:
+            delta = time.time() - self.lastCoordinatorAlive + 1 # compensation for timeouts
+            if(delta >= TIMEOUT_FOR_COORDINATOR_ALIVE):
                 print("!!! Coordinator timed out")
-                self.handler.resetCoordinator()
+                self._resetCoordinator()
 
-    def stop(self):
-        self._is_running = False
 
 class ReadThread (threading.Thread):
     '''
