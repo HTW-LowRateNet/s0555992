@@ -4,15 +4,18 @@ import modules.message as message
 import threading
 import time
 import modules.serial_interface as serial
+import logging
 
 # NUMBER OF TRIES TO FIND COORDINATOR
-TRIES_TO_DISCOVER = 3
+TRIES_TO_DISCOVER = 0
 
 # TIME BETWEEN DISCOVER MESSAGES
-SLEEP_BETWEEN_DISCOVER = 5 # SECONDS
+SLEEP_BETWEEN_DISCOVER = 20 # SECONDS
 
 # TIME TO WAIT BETWEEN COORDINATOR'S ALIV BEFORE BECOMING COORDINATOR
-TIMEOUT_FOR_COORDINATOR_ALIVE = 10
+TIMEOUT_FOR_COORDINATOR_ALIVE = 100
+
+logger = logging.getLogger(__name__)
 
 class NodeHandler:
 
@@ -32,7 +35,7 @@ class NodeHandler:
             'AT+SAVE'
         ]
         # GENERAL MODULE CONFIGURATION
-        print("Configuring module")
+        logger.debug("Configuring module")
         for cmd in commands:
             serial.write(cmd)
         
@@ -49,11 +52,17 @@ class NodeHandler:
         try:
             msg = message.parseMessage(text)
         except:
-            print("Invalid message: " + text)
+            logger.warn("Invalid message: " + text)
             return
 
-        if msg.code == message.Code.COORD_ALIVE:
-            self._handleCoordinatorAlive(msg)
+        
+        actions = {
+            message.Code.COORD_ALIVE : self._handleCoordinatorAlive,
+            message.Code.NETWORK_RESET : self._reset
+        }
+        
+        if(msg.code in actions):
+            actions[msg.code]()
         else:
             # OTHER MESSAGE: DISPATCH TO NODE
             self.node.onMessage(msg)
@@ -65,7 +74,7 @@ class NodeHandler:
         executes thread for reading serial interface and
         starts discovery process
         '''
-        print("Starting node handler")
+        logger.debug("Starting node handler")
         self.readThread = ReadThread(self)
         self.readThread.start()
         self._discoverCoordinator()
@@ -78,13 +87,18 @@ class NodeHandler:
 
     def stop(self): 
         '''
-        shutsdown all threads
+        shuts down all threads
         '''
-        print("Shutting down node handler...")
+        logger.info("Shutting down node handler...")
         self.readThread.stop()
                 
         if self.isCoordinator():
             self.node.stopKeepAlive()
+
+    def _reset(self):
+        logger.debug("Handle network reset!")
+        self.node=Node()
+        self._resetCoordinator()
 
     def _resetCoordinator(self):
         '''
@@ -101,13 +115,15 @@ class NodeHandler:
         handle ALIVE Message from coordinator
         '''
         self.lastCoordinatorAlive = time.time()
-        print("Coordinator alive")
+        logger.debug("Coordinator alive")
         if not(self.hasCoordinator and self.isCoordinator):
-            print("Coordinator remembered")
+            logger.debug("Coordinator remembered")
             self.coordLock.acquire()
             self.hasCoordinator = True
             self.coordLock.release()
-            threading.Thread(target=self._coordinatorTimeout).start()
+            timeout = threading.Thread(target=self._coordinatorTimeout)
+            timeout.start()
+            self.node.requestAddress()
 
     def _discoverCoordinator(self):
         '''
@@ -117,7 +133,7 @@ class NodeHandler:
         for x in range(0, TRIES_TO_DISCOVER):
             self.coordLock.acquire()
             if not self.hasCoordinator:
-                print("no coordinator. request no " + str(x + 1))
+                logger.debug("no coordinator. request no " + str(x + 1))
                 self.coordLock.release()
                 self.node.sendMessage(message.discoverCoordinator(self.node.address))
             else:
@@ -127,7 +143,7 @@ class NodeHandler:
 
         self.coordLock.acquire()
         if not self.hasCoordinator:
-            print("being coordinator now")
+            logger.info("being coordinator now")
             self._makeCoordinator()
         self.coordLock.release()
 
@@ -147,7 +163,7 @@ class NodeHandler:
         while self.hasCoordinator:
             delta = time.time() - self.lastCoordinatorAlive + 1 # compensation for timeouts
             if(delta >= TIMEOUT_FOR_COORDINATOR_ALIVE):
-                print("!!! Coordinator timed out")
+                logger.debug("!!! Coordinator timed out")
                 self._resetCoordinator()
 
 
