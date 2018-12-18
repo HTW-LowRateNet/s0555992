@@ -2,6 +2,9 @@ from modules.node import Node
 import threading
 import time
 import modules.message as message
+import logging
+
+logger = logging.getLogger(__name__)
 
 SLEEP_BETWEEN_HEARTBEAT = 10 # SECONDS
 
@@ -9,7 +12,8 @@ class Coordinator(Node):
 
     def __init__(self):
         Node.__init__(self)
-        self.setAddress("0000")
+        self.setAddress(0xFFFF)
+        self.addressCount=0x0010 #0010 - FFFE
         self.lastheartbeat = 0.0
         self.startKeepAlive()
 
@@ -18,11 +22,12 @@ class Coordinator(Node):
         self.keepAlive.start()
 
     def stopKeepAlive(self):
-        print("stopping Coordinator keepalive")
+        logger.debug("stopping Coordinator keepalive")
         self.keepAlive.stop()
+        self.keepAlive.join()
 
     def onMessage(self, msg):
-        print("Coordinator handling message") 
+        logger.debug("Coordinator handling message") 
 
         actions = {
             message.Code.COORD_DISCOVERY : self.handleDiscovery,
@@ -30,24 +35,24 @@ class Coordinator(Node):
         }
         
         if(msg.code in actions):
-            actions[msg.code]()
+            actions[msg.code](msg)
             return
         else:
-            print("Unsupported message code " + str(msg.code))
-        
+            logger.debug("Unsupported message code " + str(msg.code))
 
         if(msg.dest != "0000"):
             # NO COORDINATOR MESSAGE
             super(Coordinator, self).onMessage(msg)
             return
         
-    def handleDiscovery(self):
-        print("Aliv requested")
+    def handleDiscovery(self, msg):
+        logger.debug("Aliv requested")
         self._sendHeartbeat()
     
     def handleAddress(self, msg):
-        print("Address requested")
-        pass
+        logger.debug("Address requested")
+        self.sendMessage(message.addressResponse(msg.src, "%04x" % self.addressCount))
+        self.addressCount = (self.addressCount + 1)
         
     def _sendHeartbeat(self):
         self.sendMessage(message.coordinatorHeartbeat())
@@ -56,12 +61,12 @@ class Coordinator(Node):
 class CoordAlivThread (threading.Thread):
     def __init__(self, coordinator):
         threading.Thread.__init__(self)
-        self._is_running = True
+        self._stop_event = threading.Event()
         self.coordinator = coordinator
     def run(self):
-        while self._is_running:
+        while not self._stop_event.is_set():
             delta = time.time() - self.coordinator.lastheartbeat
             if(delta >= SLEEP_BETWEEN_HEARTBEAT - 1): # -1 to compensate serial timeout
                 self.coordinator._sendHeartbeat()
     def stop(self):
-        self._is_running = False
+        self._stop_event.set()

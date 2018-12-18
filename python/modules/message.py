@@ -1,14 +1,20 @@
 from enum import Enum
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 class Code(Enum):
     COORD_DISCOVERY = 'CDIS'
     COORD_ALIVE = 'ALIV'
     ADDRESS = 'ADDR'
+    ADDRESS_ACK = 'AACK'
+    NETWORK_RESET = 'NRST'
     
 
 def parseMessage(text):
     #LR,sender,lng,text(code, id, ttl, hops, srcAddr, destAddress, payload)
-    print("Parsing message " + text)
+    logger.debug("Parsing message " + text)
     try:
         parts = text.split(',')
         code = Code(parts[3])
@@ -20,7 +26,7 @@ def parseMessage(text):
         payload = parts[9]
         return Message(code, src, dest, payload, id, ttl, hops)
     except Exception as e:
-        print("Failed to parse message " + e.message)
+        logger.warn("Failed to parse message " + e)
         raise ValueError("Invalid message format")
 
 def discoverCoordinator(src):
@@ -35,6 +41,11 @@ def addressRequest(src):
 def addressResponse(dest, addr):
     return Message(Code.ADDRESS, "0000", dest, addr)
 
+def addressAcknowledge(addr):
+    return Message(Code.ADDRESS_ACK, addr, "0000", "")
+
+def networkReset(src):
+    return Message(Code.NETWORK_RESET, src, "FFFF", "")
 
 class Message:
 
