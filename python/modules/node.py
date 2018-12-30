@@ -65,6 +65,7 @@ class Node:
 
     def requestAddress(self):
         addr = threading.Thread(target=self._requestAddress)
+        addr.setDaemon(True)
         addr.start()
 
     def _requestAddress(self):

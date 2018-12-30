@@ -139,6 +139,7 @@ class NodeHandler:
             self.hasCoordinator = True
             self.coordLock.release()
             timeout = threading.Thread(target=self._coordinatorTimeout)
+            timeout.setDaemon(True)
             timeout.start()
             self.node.requestAddress()
 
@@ -194,6 +195,7 @@ class ReadThread (threading.Thread):
         threading.Thread.__init__(self)
         self._stop_event = threading.Event()
         self.handler = handler
+        self.setDaemon(True)
     def run(self):
         while not self._stop_event.is_set():
             serial.read(self.handler.onSerialInput)

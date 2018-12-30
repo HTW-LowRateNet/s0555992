@@ -62,6 +62,7 @@ class CoordAlivThread (threading.Thread):
         threading.Thread.__init__(self)
         self._stop_event = threading.Event()
         self.coordinator = coordinator
+        self.setDaemon(True)
     def run(self):
         while not self._stop_event.is_set():
             delta = time.time() - self.coordinator.lastheartbeat
