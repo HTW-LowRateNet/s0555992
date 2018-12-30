@@ -5,7 +5,6 @@ import modules.message as message
 import logging
 
 logger = logging.getLogger(__name__)
-
 SLEEP_BETWEEN_HEARTBEAT = 20 # SECONDS
 
 class Coordinator(Node):
@@ -53,7 +52,7 @@ class Coordinator(Node):
         logger.debug("Address requested")
         self.sendMessage(message.addressResponse(msg.src, "%04x" % self.addressCount))
         self.addressCount = (self.addressCount + 1)
-
+        
     def _sendHeartbeat(self):
         self.sendMessage(message.coordinatorHeartbeat())
         self.lastheartbeat = time.time()

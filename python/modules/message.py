@@ -10,8 +10,7 @@ class Code(Enum):
     ADDRESS = 'ADDR'
     ADDRESS_ACK = 'AACK'
     NETWORK_RESET = 'NRST'
-    MESSAGE = 'MSSG'
-    
+    MESSAGE = 'MSSG'    
 
 def parseMessage(text):
     #LR,sender,lng,text(code, id, ttl, hops, srcAddr, destAddress, payload)
