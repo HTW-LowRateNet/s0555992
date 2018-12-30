@@ -6,13 +6,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-SLEEP_BETWEEN_HEARTBEAT = 10 # SECONDS
+SLEEP_BETWEEN_HEARTBEAT = 20 # SECONDS
 
 class Coordinator(Node):
 
     def __init__(self):
         Node.__init__(self)
-        self.setAddress(0xFFFF)
+        self.setAddress(0xFFFF, True)
         self.addressCount=0x0010 #0010 - FFFE
         self.lastheartbeat = 0.0
         self.startKeepAlive()
@@ -53,7 +53,7 @@ class Coordinator(Node):
         logger.debug("Address requested")
         self.sendMessage(message.addressResponse(msg.src, "%04x" % self.addressCount))
         self.addressCount = (self.addressCount + 1)
-        
+
     def _sendHeartbeat(self):
         self.sendMessage(message.coordinatorHeartbeat())
         self.lastheartbeat = time.time()

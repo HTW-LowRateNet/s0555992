@@ -10,6 +10,7 @@ class Code(Enum):
     ADDRESS = 'ADDR'
     ADDRESS_ACK = 'AACK'
     NETWORK_RESET = 'NRST'
+    MESSAGE = 'MSSG'
     
 
 def parseMessage(text):
@@ -19,24 +20,25 @@ def parseMessage(text):
         parts = text.split(',')
         code = Code(parts[3])
         id = parts[4]
-        ttl = parts[5]
-        hops = parts[6]
+        ttl = int(parts[5])
+        hops = int(parts[6])
         src = parts[7]
         dest = parts[8]
         payload = parts[9]
+
         return Message(code, src, dest, payload, id, ttl, hops)
     except Exception as e:
         logger.warn("Failed to parse message " + e)
         raise ValueError("Invalid message format")
 
 def discoverCoordinator(src):
-    return Message(Code.COORD_DISCOVERY, src, "FFFF", "")
+    return Message(Code.COORD_DISCOVERY, src, "0000", "")
 
 def coordinatorHeartbeat():
     return Message(Code.COORD_ALIVE, "0000", "FFFF", "")
 
 def addressRequest(src):
-    return Message(Code.ADDRESS, src, "FFFF", "")
+    return Message(Code.ADDRESS, src, "0000", "")
 
 def addressResponse(dest, addr):
     return Message(Code.ADDRESS, "0000", dest, addr)
@@ -46,6 +48,9 @@ def addressAcknowledge(addr):
 
 def networkReset(src):
     return Message(Code.NETWORK_RESET, src, "FFFF", "")
+
+def message(src, dest, content):
+    return Message(Code.MESSAGE, src, dest, content)
 
 class Message:
 

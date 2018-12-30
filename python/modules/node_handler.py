@@ -7,7 +7,7 @@ import modules.serial_interface as serial
 import logging
 
 # NUMBER OF TRIES TO FIND COORDINATOR
-TRIES_TO_DISCOVER = 0
+TRIES_TO_DISCOVER = 3
 
 # TIME BETWEEN DISCOVER MESSAGES
 SLEEP_BETWEEN_DISCOVER = 20 # SECONDS
@@ -25,6 +25,8 @@ class NodeHandler:
 
         Configures module by calling AT commands
         '''
+        
+        self._stop_event = threading.Event()
         self.coordLock = threading.Lock()
         self.hasCoordinator = False
         self.lastCoordinatorAlive = 0
@@ -53,16 +55,17 @@ class NodeHandler:
             msg = message.parseMessage(text)
         except:
             logger.warn("Invalid message: " + text)
-            return
+            return        
 
-        
         actions = {
             message.Code.COORD_ALIVE : self._handleCoordinatorAlive,
             message.Code.NETWORK_RESET : self._reset
         }
         
+        logger.debug("Message: " + msg.toString())
+
         if(msg.code in actions):
-            actions[msg.code]()
+            actions[msg.code](msg)
         else:
             # OTHER MESSAGE: DISPATCH TO NODE
             self.node.onMessage(msg)
@@ -90,14 +93,21 @@ class NodeHandler:
         shuts down all threads
         '''
         logger.info("Shutting down node handler...")
+        self._stop_event.set()
         self.readThread.stop()
         self.readThread.join()
                 
         if self.isCoordinator():
             self.node.stopKeepAlive()
 
-    def _reset(self):
-        logger.debug("Handle network reset!")
+    def sendMessage(self, dest, text):
+        '''
+        delegate a text message to node for chatting
+        '''
+        self.node.sendMessage(message.message(self.node.address, dest, text))
+
+    def _reset(self, msg):
+        logger.info("Handle network reset!")
         self.node=Node()
         self._resetCoordinator()
 
@@ -117,8 +127,14 @@ class NodeHandler:
         '''
         self.lastCoordinatorAlive = time.time()
         logger.debug("Coordinator alive")
-        if not(self.hasCoordinator and self.isCoordinator):
-            logger.debug("Coordinator remembered")
+
+        if self.isCoordinator():
+            logger.warn("Got alive from other coordinator")
+            self.node.sendMessage(message.networkReset(self.node.address))
+            self._reset(msg)
+
+        elif not self.hasCoordinator:
+            logger.info("Coordinator remembered")
             self.coordLock.acquire()
             self.hasCoordinator = True
             self.coordLock.release()
@@ -132,9 +148,11 @@ class NodeHandler:
         if discovery fails, become coordinator
         '''
         for x in range(0, TRIES_TO_DISCOVER):
+            if(self._stop_event.isSet()):
+                return
             self.coordLock.acquire()
             if not self.hasCoordinator:
-                logger.debug("no coordinator. request no " + str(x + 1))
+                logger.info("no coordinator. request no " + str(x + 1))
                 self.coordLock.release()
                 self.node.sendMessage(message.discoverCoordinator(self.node.address))
             else:

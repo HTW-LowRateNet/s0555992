@@ -28,8 +28,11 @@ def main():
         if input_val == 'exit':
             handler.stop()
             exit()
+        elif (input_val.startswith("AT")):
+            serial.write(input_val)
         else:
-            serial.write(input_val + '\r\n')
+            parts = input_val.split(',')
+            handler.sendMessage(parts[0], parts[1])
 
 # MAIN METHOD HANDLING
 if __name__ == "__main__":
