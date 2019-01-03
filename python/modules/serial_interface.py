@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 def initIOWrapper(serialPort):
 
+    global ser
     ser = serial.Serial(
         port=serialPort,
         baudrate=BAUDRATE,
@@ -32,6 +33,7 @@ def read(callback):
     '''
     reads input from serial and passes content to callback method
     '''
+    resp = ""
     with readLock:
         resp = sio.readline()
     if resp != "":

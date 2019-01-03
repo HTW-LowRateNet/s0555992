@@ -7,7 +7,7 @@ import modules.serial_interface as serial
 import logging
 
 # NUMBER OF TRIES TO FIND COORDINATOR
-TRIES_TO_DISCOVER = 0
+TRIES_TO_DISCOVER = 3
 
 # TIME BETWEEN DISCOVER MESSAGES
 SLEEP_BETWEEN_DISCOVER = 20 # SECONDS
@@ -42,13 +42,13 @@ class NodeHandler:
             serial.write(cmd)
         
         # NODE
-        self.node = Node()
+        self.node = Node(self)
 
     def onSerialInput(self, text):
         '''
         callback method for input on serial interface
         '''
-        if(text.startswith("AT")):
+        if not text.startswith("LR"):
             serial.toSysout(text)
             return
         try:
@@ -95,8 +95,11 @@ class NodeHandler:
         logger.info("Shutting down node handler...")
         self._stop_event.set()
         self.readThread.stop()
-        self.readThread.join()
-                
+        try: 
+            self.readThread.join()
+        except KeyboardInterrupt:
+            logger.warn("ReadThread interrupted on shutdown")
+
         if self.isCoordinator():
             self.node.stopKeepAlive()
 
@@ -107,8 +110,7 @@ class NodeHandler:
         self.node.sendMessage(message.message(self.node.address, dest, text))
 
     def _reset(self, msg):
-        logger.info("Handle network reset!")
-        self.node=Node()
+        self.node=Node(self)
         self._resetCoordinator()
 
     def _resetCoordinator(self):
@@ -131,10 +133,11 @@ class NodeHandler:
         if self.isCoordinator():
             logger.warn("Got alive from other coordinator")
             self.node.sendMessage(message.networkReset(self.node.address))
+            logger.info("Handle network reset!")
             self._reset(msg)
 
         elif not self.hasCoordinator:
-            logger.info("Coordinator remembered")
+            logger.info("Coordinator present")
             self.coordLock.acquire()
             self.hasCoordinator = True
             self.coordLock.release()
@@ -142,6 +145,9 @@ class NodeHandler:
             timeout.setDaemon(True)
             timeout.start()
             self.node.requestAddress()
+
+        else:
+            self.node.forwardMessage(msg)
 
     def _discoverCoordinator(self):
         '''
@@ -171,7 +177,7 @@ class NodeHandler:
         '''
         Start coordinator mode
         '''
-        self.node = Coordinator()
+        self.node = Coordinator(self)
         self.hasCoordinator = True
 
     def _coordinatorTimeout(self):
@@ -184,7 +190,7 @@ class NodeHandler:
             delta = time.time() - self.lastCoordinatorAlive + 1 # compensation for timeouts
             if(delta >= TIMEOUT_FOR_COORDINATOR_ALIVE):
                 logger.debug("!!! Coordinator timed out")
-                self._resetCoordinator()
+                self._reset()
 
 
 class ReadThread (threading.Thread):
