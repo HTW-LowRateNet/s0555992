@@ -31,19 +31,19 @@ def parseMessage(text):
         raise ValueError("Invalid message format")
 
 def discoverCoordinator(src):
-    return Message(Code.COORD_DISCOVERY, src, "0000", "")
+    return Message(Code.COORD_DISCOVERY, src, "0000", "(Marcel M)")
 
 def coordinatorHeartbeat():
-    return Message(Code.COORD_ALIVE, "0000", "FFFF", "")
+    return Message(Code.COORD_ALIVE, "0000", "FFFF", "(Marcel M)")
 
 def addressRequest(src):
-    return Message(Code.ADDRESS, src, "0000", "")
+    return Message(Code.ADDRESS, src, "0000", "(Marcel M)")
 
 def addressResponse(dest, addr):
     return Message(Code.ADDRESS, "0000", dest, addr)
 
 def addressAcknowledge(addr):
-    return Message(Code.ADDRESS_ACK, addr, "0000", "")
+    return Message(Code.ADDRESS_ACK, addr, "0000", "(Marcel M)")
 
 def networkReset(src):
     return Message(Code.NETWORK_RESET, src, "FFFF", "")
@@ -63,4 +63,4 @@ class Message:
         self.payload = payload
 
     def toString(self):
-        return str(self.code.value + "," + str(self.id) + "," + str(self.ttl) + "," + str(self.hops) + "," + self.src + "," + self.dest + "," + self.payload)
+        return str(self.code.value + "," + str(self.id) + "," + str(self.ttl) + "," + str(self.hops) + "," + self.src + "," + self.dest + "," + self.payload + ",")

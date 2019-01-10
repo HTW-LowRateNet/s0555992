@@ -10,11 +10,12 @@ SLEEP_BETWEEN_HEARTBEAT = 20 # SECONDS
 class Coordinator(Node):
 
     def __init__(self, handler):
-        Node.__init__(self, handler, 0xFFFF)
+        Node.__init__(self, handler, 0x0000)
         #self.setAddress(0xFFFF, True)
         self.addressCount=0x0010 #0010 - FFFE
         self.lastheartbeat = 0.0
         self.startKeepAlive()
+        self.heartbeats = set()
 
     def startKeepAlive(self):
         self.keepAlive = CoordAlivThread(self)
@@ -54,8 +55,9 @@ class Coordinator(Node):
         self.addressCount = (self.addressCount + 1)
         
     def _sendHeartbeat(self):
-        self.sendMessage(message.coordinatorHeartbeat())
-        self.lastheartbeat = time.time()
+        id = self.sendMessage(message.coordinatorHeartbeat())
+        self.lastheartbeattime = time.time()
+        self.heartbeats.add(id)
 
 class CoordAlivThread (threading.Thread):
     def __init__(self, coordinator):

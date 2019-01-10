@@ -1,4 +1,3 @@
-import modules.serial_interface as serial
 import threading
 import time
 import random
@@ -12,25 +11,29 @@ LIFETIME_OF_FORWARD_SET =  5 * 60 #SECONDS
 
 def getRandomAddress():
     # SET RANDOM ADDRESS
-    return random.randint(0x0011, 0x00FF)
+    return random.randint(0x0011, 0x0FFF)
 
 class Node:
 
-    def __init__(self, handler, address = getRandomAddress()):
+    def __init__(self, handler, address = -1):
         self.handler = handler
         self.messageIdCount = 0x0000
+        if address == -1:
+            address = getRandomAddress()
+            self.randomAddr = True
+        else:
+            self.randomAddr = False
         self.setAddress(address, True)
         self.forwardedMessages = set()
         self.forwardSetTime = time.time()
-        self.randomAddr = True
 
     def setAddress(self, address, parse=False):
         if parse:
             self.address = "%04X" % address
         else:
             self.address = address
-        logger.info("Set address to " + self.address)
-        serial.write("AT+ADDR=" + self.address)
+        logger.info("Set address to {} (Temporary: {})".format(self.address, str(self.randomAddr)))
+        self.handler.serial.write("AT+ADDR=" + self.address)
 
     def onMessage(self, msg):
         logger.debug("Incomming message: {}".format(msg.toString()))
@@ -61,9 +64,9 @@ class Node:
         if(msg.src=="0000" and msg.code==message.Code.ADDRESS):
             if self.randomAddr:
                 logger.info("Got new address: {}".format(msg.payload))
+                self.randomAddr = False
                 self.setAddress(msg.payload)
                 self.sendMessage(message.addressAcknowledge(self.address))
-                self.randomAddr = False
         else:
             logger.info("Got message from '{}': {}".format(msg.src, msg.payload))
 
@@ -71,9 +74,10 @@ class Node:
         msg.id="%04x" % self.messageIdCount
         messageString = msg.toString()
         logger.debug("Sending message '{}'".format(messageString))
-        serial.write_cb('AT+SEND=' + str(len(messageString)), self.handler.onSerialInput)
-        serial.write_cb(messageString, self.handler.onSerialInput)
+        self.handler.serial.write('AT+SEND=' + str(len(messageString)))
+        self.handler.serial.write(messageString)
         self.messageIdCount += 1
+        return msg.id
 
     def requestAddress(self):
         addr = threading.Thread(target=self._requestAddress)

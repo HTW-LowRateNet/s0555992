@@ -1,13 +1,14 @@
 from modules.node import Node
 from modules.coordinator import Coordinator
 import modules.message as message
+import modules.serial_interface as serial
 import threading
 import time
-import modules.serial_interface as serial
 import logging
 
 # NUMBER OF TRIES TO FIND COORDINATOR
-TRIES_TO_DISCOVER = 3
+TRIES_TO_DISCOVER = 2
+
 
 # TIME BETWEEN DISCOVER MESSAGES
 SLEEP_BETWEEN_DISCOVER = 20 # SECONDS
@@ -19,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 class NodeHandler:
 
-    def __init__(self):
+    def __init__(self, serial):
         '''
         Constructor
 
         Configures module by calling AT commands
         '''
-        
+        self.serial = serial
         self._stop_event = threading.Event()
         self.coordLock = threading.Lock()
         self.hasCoordinator = False
@@ -36,10 +37,13 @@ class NodeHandler:
             'AT+DEST=FFFF', # BROADCAST EVERYTHING
             'AT+SAVE'
         ]
+
+        self.serial.start(self.onSerialInput)
+
         # GENERAL MODULE CONFIGURATION
         logger.debug("Configuring module")
         for cmd in commands:
-            serial.write(cmd)
+            self.serial.write(cmd)
         
         # NODE
         self.node = Node(self)
@@ -48,39 +52,37 @@ class NodeHandler:
         '''
         callback method for input on serial interface
         '''
-        if not text.startswith("LR"):
-            serial.toSysout(text)
-            return
-        try:
-            msg = message.parseMessage(text)
-        except:
-            logger.warn("Invalid message: " + text)
-            return        
-
-        actions = {
-            message.Code.COORD_ALIVE : self._handleCoordinatorAlive,
-            message.Code.NETWORK_RESET : self._reset
-        }
+        logger.debug("< " + text)
+        if text == "AT+OK" or text == "AT+SENDED":
+            serial.writeLock.release()
+            return 
         
-        logger.debug("Message: " + msg.toString())
+        if text.startswith("ERR:"):
+            logger.error("FAILED TO EXECUTE COMMAND!")        
+            serial.writeLock.release()
+            return
 
+        if text.startswith("LR"):
+            try:
+                msg = message.parseMessage(text)
+                self._onMessage(msg)
+            except:
+                logger.warn("Invalid message: " + text)
+                return
+
+    def _onMessage(self, msg):
+        actions = {
+                    message.Code.COORD_ALIVE : self._onCoordinatorAlive,
+                    message.Code.NETWORK_RESET : self._onResetMessage
+        }
+                
+        logger.debug("Message: " + msg.toString())
+        
         if(msg.code in actions):
             actions[msg.code](msg)
         else:
             # OTHER MESSAGE: DISPATCH TO NODE
             self.node.onMessage(msg)
-
-    def start(self):
-        '''
-        Start the handler
-
-        executes thread for reading serial interface and
-        starts discovery process
-        '''
-        logger.debug("Starting node handler")
-        self.readThread = ReadThread(self)
-        self.readThread.start()
-        self._discoverCoordinator()
 
     def isCoordinator(self):
         '''
@@ -88,17 +90,13 @@ class NodeHandler:
         '''
         return isinstance(self.node, Coordinator)
 
-    def stop(self): 
+    def shutdown(self): 
         '''
         shuts down all threads
         '''
         logger.info("Shutting down node handler...")
         self._stop_event.set()
-        self.readThread.stop()
-        try: 
-            self.readThread.join()
-        except KeyboardInterrupt:
-            logger.warn("ReadThread interrupted on shutdown")
+        self.serial.stop()
 
         if self.isCoordinator():
             self.node.stopKeepAlive()
@@ -109,9 +107,17 @@ class NodeHandler:
         '''
         self.node.sendMessage(message.message(self.node.address, dest, text))
 
-    def _reset(self, msg):
-        self.node=Node(self)
-        self._resetCoordinator()
+    def _onResetMessage(self, msg):
+        if msg.src == "0000":
+            logger.warn("Network reset from coordinator!")
+            self._reset()
+        else:
+            logger.debug("Network reset from other node ignored")
+
+    def _reset(self):
+            self.serial.write("AT+RST")
+            self.node=Node(self)
+            self._resetCoordinator()
 
     def _resetCoordinator(self):
         '''
@@ -120,10 +126,10 @@ class NodeHandler:
         self.coordLock.acquire()
         self.hasCoordinator = False
         self.coordLock.release()
-        self._discoverCoordinator()
+        self.discoverCoordinator()
 
 
-    def _handleCoordinatorAlive(self, msg):
+    def _onCoordinatorAlive(self, msg):
         '''
         handle ALIVE Message from coordinator
         '''
@@ -131,10 +137,13 @@ class NodeHandler:
         logger.debug("Coordinator alive")
 
         if self.isCoordinator():
+            if msg.id in self.node.heartbeats:
+                logger.debug("Got own alive back")
+                return
             logger.warn("Got alive from other coordinator")
             self.node.sendMessage(message.networkReset(self.node.address))
             logger.info("Handle network reset!")
-            self._reset(msg)
+            self._reset()
 
         elif not self.hasCoordinator:
             logger.info("Coordinator present")
@@ -149,7 +158,7 @@ class NodeHandler:
         else:
             self.node.forwardMessage(msg)
 
-    def _discoverCoordinator(self):
+    def discoverCoordinator(self):
         '''
         try discovering a coordinator in network
         if discovery fails, become coordinator
@@ -191,20 +200,3 @@ class NodeHandler:
             if(delta >= TIMEOUT_FOR_COORDINATOR_ALIVE):
                 logger.debug("!!! Coordinator timed out")
                 self._reset()
-
-
-class ReadThread (threading.Thread):
-    '''
-    thread for reading serial input
-    '''
-    def __init__(self, handler):
-        threading.Thread.__init__(self)
-        self._stop_event = threading.Event()
-        self.handler = handler
-        self.setDaemon(True)
-    def run(self):
-        while not self._stop_event.is_set():
-            serial.read(self.handler.onSerialInput)
-            time.sleep(0.1)
-    def stop(self):
-        self._stop_event.set()

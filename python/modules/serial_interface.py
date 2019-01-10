@@ -2,54 +2,81 @@ import serial
 import io
 import threading
 import logging
+import time
 
 BAUDRATE = 115200
 TIMEOUT = 0.3
 DELIMITER = "\r\n"
 
-readLock = threading.Lock()
 writeLock = threading.Lock()
+LOCK_TIMEOUT = 5 # SECONDS
 
 logger = logging.getLogger(__name__)
 
-def initIOWrapper(serialPort):
+class SerialInterface:
 
-    global ser
-    ser = serial.Serial(
-        port=serialPort,
-        baudrate=BAUDRATE,
-        timeout=TIMEOUT
-    )
+    def __init__(self, serialPort):
+        logger.info("Opening serial port {}".format(serialPort))
+        ser = serial.Serial(
+            port=serialPort,
+            baudrate=BAUDRATE,
+            timeout=TIMEOUT
+        )
 
-    if(not ser.isOpen()):
-        ser.open()
-    
-    global sio
-    sio = io.TextIOWrapper(io.BufferedRWPair(ser, ser))
+        if(not ser.isOpen()):
+            ser.open()
+        
+        self.sio = io.TextIOWrapper(io.BufferedRWPair(ser, ser))
 
-    logger.debug("initialized IOWrapper for Serial port " + serialPort)
+        logger.debug("initialized SerialInterface on port " + serialPort)
 
-def read(callback):
+    def read(self):
+        '''
+        reads input from serial
+        '''
+        return self.sio.readline()
+
+    def write(self, message):
+        if writeLock.acquire(True, LOCK_TIMEOUT):
+            logger.debug("> '{}'".format(message))
+            self.sio.write(message + DELIMITER)
+            self.sio.flush()
+        else:  
+            logger.warn("Write Lock Timeout reached")
+
+    def start(self, readListener):
+        self.reading = ReadThread(self, readListener)
+        self.reading.start()
+
+    def stop(self):
+        self.reading.stop()
+        try: 
+            self.reading.join()
+        except KeyboardInterrupt:
+            logger.warn("ReadThread interrupted on shutdown")
+
+class ReadThread (threading.Thread):
     '''
-    reads input from serial and passes content to callback method
+    thread for reading serial input
     '''
-    resp = ""
-    with readLock:
-        resp = sio.readline()
-    if resp != "":
-        text = resp[:-1] # Remove last linebreak
-        callback(text)
-        read(callback)
+    def __init__(self, interface, readListener):
+        threading.Thread.__init__(self)
+        self._stop_event = threading.Event()
+        self.interface = interface
+        self.setDaemon(True)
+        self.readListener = readListener
 
-def toSysout(message):
-    logger.debug("< serial '{}'".format(message))
+    def run(self):
+        while not self._stop_event.is_set():
+            resp = self.interface.read()
+            if resp != "" and len(resp) > 0:
+                text = resp[:-1] # Remove last linebreak
+                self._startProcessingThread(text)
+            time.sleep(0.1)
 
-def write_cb(message, callback):
-    with writeLock:
-        logger.debug("> '{}'".format(message))
-        sio.write(message + DELIMITER)
-        sio.flush()
-        read(callback)
+    def stop(self):
+        self._stop_event.set()
 
-def write(message):
-    write_cb(message, toSysout)
+    def _startProcessingThread(self, text):
+        processor = threading.Thread(target=self.readListener, args=[text])
+        processor.start()
