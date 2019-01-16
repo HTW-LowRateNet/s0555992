@@ -12,8 +12,8 @@ class Coordinator(Node):
     def __init__(self, handler):
         Node.__init__(self, handler, 0x0000)
         #self.setAddress(0xFFFF, True)
-        self.addressCount=0x0010 #0010 - FFFE
-        self.lastheartbeat = 0.0
+        self.addressCount=0x1000 #0010 - FFFE
+        self.lastheartbeattime = 0.0
         self.startKeepAlive()
         self.heartbeats = set()
 
@@ -24,14 +24,14 @@ class Coordinator(Node):
     def stopKeepAlive(self):
         logger.debug("stopping Coordinator keepalive")
         self.keepAlive.stop()
-        self.keepAlive.join()
 
     def onMessage(self, msg):
         logger.debug("Coordinator handling message") 
 
         actions = {
             message.Code.COORD_DISCOVERY : self.handleDiscovery,
-            message.Code.ADDRESS : self.handleAddress
+            message.Code.ADDRESS : self.handleAddress,
+            message.Code.ADDRESS_ACK : self.handleAddressAck
         }
         
         if(msg.code in actions):
@@ -50,14 +50,19 @@ class Coordinator(Node):
         self._sendHeartbeat()
     
     def handleAddress(self, msg):
-        logger.debug("Address requested")
-        self.sendMessage(message.addressResponse(msg.src, "%04x" % self.addressCount))
-        self.addressCount = (self.addressCount + 1)
+        addr = "%04x" % self.addressCount
+        logger.info("Address requested from {} [sending {}]".format(msg.src, addr))
+        self.sendMessage(message.addressResponse(msg.src, addr))
         
+    def handleAddressAck(self, msg):
+        logger.info("Got Address Acknowledge [from {}]".format(msg.src))
+        self.addressCount = (self.addressCount + 1)
+
     def _sendHeartbeat(self):
         id = self.sendMessage(message.coordinatorHeartbeat())
-        self.lastheartbeattime = time.time()
-        self.heartbeats.add(id)
+        if id != -1:
+            self.lastheartbeattime = time.time()
+            self.heartbeats.add(id)
 
 class CoordAlivThread (threading.Thread):
     def __init__(self, coordinator):
@@ -67,7 +72,7 @@ class CoordAlivThread (threading.Thread):
         self.setDaemon(True)
     def run(self):
         while not self._stop_event.is_set():
-            delta = time.time() - self.coordinator.lastheartbeat
+            delta = time.time() - self.coordinator.lastheartbeattime
             if(delta >= SLEEP_BETWEEN_HEARTBEAT - 1): # -1 to compensate serial timeout
                 self.coordinator._sendHeartbeat()
     def stop(self):

@@ -16,23 +16,25 @@ def main():
     setup_logging()
     port = sys.argv[1]
     
-    global ser
     ser = serial.SerialInterface(port)
+
+    logging.getLogger("modules.serial_interface").setLevel(logging.INFO)
 
     global handler
     handler = NodeHandler(ser)
-    handler.discoverCoordinator()
+    handler.start()
 
     while 1:
         input_val = input("")
         if input_val == 'exit':
-            handler.stop()
+            handler.shutdown()
             exit()
         elif (input_val.startswith("AT")):
             ser.write(input_val)
         else:
             parts = input_val.split(':')
-            handler.sendMessage(parts[0], parts[1])
+            if len(parts) == 2:
+                handler.sendMessage(parts[0], parts[1])
 
 # MAIN METHOD HANDLING
 if __name__ == "__main__":
@@ -40,5 +42,13 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         logger.info("Shutting down")
-        serial.writeLock.release()
-        handler.stop()
+        try:
+            serial.writeLock.release()
+        except RuntimeError:
+            pass
+        try: 
+            handler
+        except NameError:
+            pass
+        else:
+            handler.shutdown()

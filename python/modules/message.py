@@ -13,18 +13,18 @@ class Code(Enum):
     MESSAGE = 'MSSG'    
 
 def parseMessage(text):
-    #LR,sender,lng,text(code, id, ttl, hops, srcAddr, destAddress, payload)
-    logger.debug("Parsing message " + text)
+    #LR,sender,lng,code,id,ttl,hops,srcAddr,destAddress,payload
+    #logger.debug("Parsing message " + text)
     try:
         parts = text.split(',')
         code = Code(parts[3])
         id = parts[4]
         ttl = int(parts[5])
         hops = int(parts[6])
-        src = parts[7]
-        dest = parts[8]
-        payload = parts[9]
-
+        src = str(parts[7]).upper()
+        dest = str(parts[8]).upper()
+        payload = ",".join(parts[9:]) # Join everything again to the end
+                                      #in case there is a comma in payload
         return Message(code, src, dest, payload, id, ttl, hops)
     except Exception as e:
         logger.warn("Failed to parse message " + e)
@@ -63,4 +63,4 @@ class Message:
         self.payload = payload
 
     def toString(self):
-        return str(self.code.value + "," + str(self.id) + "," + str(self.ttl) + "," + str(self.hops) + "," + self.src + "," + self.dest + "," + self.payload + ",")
+        return str(self.code.value + "," + str(self.id) + "," + str(self.ttl) + "," + str(self.hops) + "," + self.src + "," + self.dest + "," + self.payload)

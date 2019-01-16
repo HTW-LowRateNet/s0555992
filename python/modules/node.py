@@ -55,7 +55,7 @@ class Node:
                 logger.debug("Message reached it's end of life")
             else:
                 logger.debug("Forwarding ...")
-                self.sendMessage(msg)
+                self.sendMessage(msg, False)
                 self.forwardedMessages.add(msgId)
         else:
             logger.debug("Already forwarded message")
@@ -63,6 +63,13 @@ class Node:
     def onOwnMessage(self, msg):
         if(msg.src=="0000" and msg.code==message.Code.ADDRESS):
             if self.randomAddr:
+                if msg.payload.endswith(","):
+                    msg.payload = msg.payload[:-1]
+                try:
+                    int(msg.payload, 16) # Try to parse
+                except ValueError:
+                    logger.warn("Got invalid address: {}".format(msg.payload))
+                    return
                 logger.info("Got new address: {}".format(msg.payload))
                 self.randomAddr = False
                 self.setAddress(msg.payload)
@@ -70,14 +77,18 @@ class Node:
         else:
             logger.info("Got message from '{}': {}".format(msg.src, msg.payload))
 
-    def sendMessage(self, msg):
-        msg.id="%04x" % self.messageIdCount
+    def sendMessage(self, msg, setId = True):
+        if setId:
+            msg.id="%04x" % self.messageIdCount
         messageString = msg.toString()
         logger.debug("Sending message '{}'".format(messageString))
-        self.handler.serial.write('AT+SEND=' + str(len(messageString)))
-        self.handler.serial.write(messageString)
-        self.messageIdCount += 1
-        return msg.id
+        if self.handler.serial.write('AT+SEND=' + str(len(messageString))):
+            self.handler.serial.write(messageString)
+            self.messageIdCount += 1
+            return msg.id
+        else:
+            logger.warn("Failed to send message")
+            return -1
 
     def requestAddress(self):
         addr = threading.Thread(target=self._requestAddress)
