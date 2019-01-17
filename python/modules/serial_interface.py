@@ -51,7 +51,7 @@ class SerialInterface:
         else:  
             logger.error("Write Lock Timeout reached (for '{}')".format(message))
             self.writeAcquireTries +=1
-            if self.writeAcquireTries >= 3: # FALLBACK MECHANISM TO PREVENT DEADLOCK
+            if self.writeAcquireTries >= 2: # FALLBACK MECHANISM TO PREVENT DEADLOCK
                 logger.warn("Hard release write lock")
                 writeLock.release()
             return False
@@ -88,6 +88,7 @@ class ReadThread (threading.Thread):
                     self._startProcessingThread(text)
                 time.sleep(0.1)
             except:
+                # Catch everything to prevent fatal crash of ReadThread 
                 logger.warn("Exception on reading serial input")
 
     def stop(self):

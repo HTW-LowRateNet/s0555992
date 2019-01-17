@@ -12,7 +12,7 @@ class Coordinator(Node):
     def __init__(self, handler):
         Node.__init__(self, handler, 0x0000)
         #self.setAddress(0xFFFF, True)
-        self.addressCount=0x1000 #0010 - FFFE
+        self.addressCount=0x1000 #1000 - FFFE
         self.lastheartbeattime = 0.0
         self.startKeepAlive()
         self.heartbeats = set()
